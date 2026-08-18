@@ -1,7 +1,7 @@
 {
   "id": "hyprland-visual-editor",
   "name": "Hyprland Visual Editor",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minNoctaliaVersion": "4.4.1",
   "author": "XimoCP",
   "license": "MIT",
@@ -29,7 +29,7 @@
     "defaultSettings": {
       "isSystemActive": false,
       "borderSize": 2,
-      "overlayPath": "~/.cache/noctalia/HVE/overlay.conf",
+      "overlayPath": "~/.cache/noctalia/HVE/overlay.current",
       "autoApply": true,
       "activeAnimFile": "",
       "activeBorderFile": "",

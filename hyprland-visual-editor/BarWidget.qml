@@ -7,7 +7,7 @@ import qs.Widgets
 NIconButton {
   id: root
 
-  // ── Injected Properties ──────────────────────────────────────────────
+  // ── Propiedades Inyectadas ──────────────────────────────────────────────
   property var pluginApi: null
   property ShellScreen screen
   property string widgetId: ""
@@ -15,17 +15,17 @@ NIconButton {
   property int sectionWidgetIndex: -1
   property int sectionWidgetsCount: 0
 
-  // ── Configuration Logic (Fallback Pattern) ──────────────────────────
+  // ── Lógica de Configuración (Fallback Pattern) ──────────────────────────
   property var cfg: pluginApi?.pluginSettings || ({})
   property var defaults: pluginApi?.manifest?.metadata?.defaultSettings || ({})
 
   readonly property string iconKey: cfg.icon ?? defaults.icon ?? "adjustments-horizontal"
   readonly property string iconColorKey: cfg.iconColor ?? defaults.iconColor ?? "primary"
   
-  // ── Visual Configuration ─────────────────────────────────────────────────
+  // ── Configuración Visual ─────────────────────────────────────────────────
   icon: iconKey
   
-  // NIconButton already manages tooltips automatically with these two properties:
+  // NIconButton ya gestiona los tooltips automáticamente con estas dos propiedades:
   tooltipText: pluginApi?.tr("widget.tooltip")
   tooltipDirection: BarService.getTooltipDirection(screen?.name)
   
@@ -34,7 +34,7 @@ NIconButton {
 
   colorBg: Style.capsuleColor
   
-  // Color resolution with transparency protection (Alpha check)
+  // Resolución de color con protección de transparencia (Alpha check)
   colorFg: {
     let resolved = Color.resolveColorKeyOptional(iconColorKey);
     if (root.containsMouse) return Color.mOnHover;
@@ -44,7 +44,7 @@ NIconButton {
   border.color: Style.capsuleBorderColor
   border.width: Style.borderS
 
-  // Color transition smoothing
+  // Suavizado de transiciones de color
   Behavior on colorFg {
     ColorAnimation { 
       duration: Style.animationFast
@@ -59,7 +59,7 @@ NIconButton {
     }
   }
 
-  // Context menu (Right click)
+  // El menú contextual (Click derecho)
   NPopupContextMenu {
     id: contextMenu
 

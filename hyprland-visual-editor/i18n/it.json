@@ -193,6 +193,10 @@
       "13_the_joker": {
         "title": "The Joker",
         "desc": "Estetica Joker: verde acido e viola profondo con un bagliore elettrico."
+      },
+      "14_looper": {
+        "title": "Looper",
+        "desc": "Estetica Looper: Colori del desktop con effetto loop."
       }
     }
   },

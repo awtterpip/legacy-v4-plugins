@@ -1,84 +1,154 @@
 #!/bin/bash
 
-# --- SELF-CONTAINED PATH CONFIGURATION ---
-PLUGIN_DIR="$HOME/.config/noctalia/plugins/hyprland-visual-editor"
-FRAGMENTS_DIR="$PLUGIN_DIR/assets/fragments"
+# --- PATHS ---
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/utils.sh"
 
-# [CHANGE 1] Define the new safe path outside the plugin
-HVE_SAFE_DIR="$HOME/.cache/noctalia/HVE"
-
-# [CHANGE 2] Point the temporary and final files to the new path
-FINAL_FILE="$HVE_SAFE_DIR/overlay.conf"
+# Output files in safe directory
+FINAL_FILE_LUA="$HVE_SAFE_DIR/overlay.lua"
+FINAL_FILE_CONF="$HVE_SAFE_DIR/overlay.conf"
 TEMP_FILE="$HVE_SAFE_DIR/overlay.tmp"
 
-# Official Noctalia colors path
-COLORS_FILE="$HOME/.config/hypr/noctalia/noctalia-colors.conf"
+# Format detection
+FORMAT_DETECTION_SCRIPT="$HVE_SCRIPTS_DIR/detect_format.sh"
+FORMAT_CACHE="$HVE_SAFE_DIR/hve_format"
 
-# Ensure the fragments folder exists within the plugin
-mkdir -p "$FRAGMENTS_DIR"
-
-# [CHANGE 3] Ensure the safe refuge exists before writing to it
+# Ensure directories exist
+mkdir -p "$HVE_FRAGMENTS_DIR"
 mkdir -p "$HVE_SAFE_DIR"
 
-# 1. TEMPORARY FILE CREATION
-echo "# HYPRLAND VISUAL EDITOR - MASTER OVERLAY" > "$TEMP_FILE"
-echo "# Automatically generated on: $(date)" >> "$TEMP_FILE"
-echo "" >> "$TEMP_FILE"
+# Detect format fresh
+if [ -f "$FORMAT_DETECTION_SCRIPT" ]; then
+    # shellcheck source=/dev/null
+    source "$FORMAT_DETECTION_SCRIPT"
+fi
 
-# --- [CRITICAL: COLORS FIRST] ---
-# Load variables ($primary, $secondary...) before anything else.
-if [ -f "$COLORS_FILE" ]; then
-    echo "# [SYSTEM: COLORS]" >> "$TEMP_FILE"
-    echo "source = $COLORS_FILE" >> "$TEMP_FILE"
-    echo "" >> "$TEMP_FILE"
+if [ ! -f "$FORMAT_CACHE" ]; then
+    HVE_FORMAT=$(detect_format 2>/dev/null || echo "conf")
 else
-    echo "# [WARNING] Colors file not found: $COLORS_FILE" >> "$TEMP_FILE"
+    HVE_FORMAT=$(cat "$FORMAT_CACHE")
+fi
+export HVE_FORMAT
+
+# --- CONFIGURATION BASED ON FORMAT ---
+if [ "$HVE_FORMAT" = "lua" ]; then
+    COMMENT="--"
+    EXT="lua"
+    FINAL_TARGET="$FINAL_FILE_LUA"
+else
+    COMMENT="#"
+    EXT="conf"
+    FINAL_TARGET="$FINAL_FILE_CONF"
+
+    fi
+
+# --- INITIALIZE TEMP FILE ---
+{
+    if [ "$HVE_FORMAT" = "lua" ]; then
+        echo "#!/usr/bin/env hyprland"
+    fi
+    echo "${COMMENT} HYPRLAND VISUAL EDITOR - MASTER OVERLAY"
+    echo "${COMMENT} Automatically generated (Native $HVE_FORMAT mode)"
+    echo ""
+} > "$TEMP_FILE"
+
+# --- SYSTEM: COLORS ---
+if [ "$HVE_FORMAT" = "lua" ] && [ -f "${HVE_COLORS_BASE}.conf" ]; then
+    awk -F'=' '/^[[:space:]]*\$/ {
+        var = $1; gsub(/[[:space:]]|\$/, "", var);
+        val = $2; sub(/^[[:space:]]*/, "", val); sub(/[[:space:]]*$/, "", val);
+        print var " = \"" val "\""
+    }' "${HVE_COLORS_BASE}.conf" > "${HVE_COLORS_BASE}.lua"
 fi
 
-# --- [CRITICAL FIX: IMMORTAL CURVE] ---
-# Inject the linear curve GLOBALLY here.
-echo "bezier = linear, 0, 0, 1, 1" >> "$TEMP_FILE"
-echo "# ----------------------------------------------------" >> "$TEMP_FILE"
-echo "" >> "$TEMP_FILE"
+HVE_COLORS_FILE="${HVE_COLORS_BASE}.${EXT}"
 
+if [ -f "$HVE_COLORS_FILE" ]; then
+    {
+        echo "${COMMENT} [SYSTEM: COLORS]"
+        if [ "$HVE_FORMAT" = "lua" ]; then
+            echo "dofile(os.getenv(\"HOME\") .. \"/.config/hypr/noctalia/noctalia-colors.lua\")"
+        else
+            echo "source = $HVE_COLORS_FILE"
+        fi
+        echo ""
+    } >> "$TEMP_FILE"
+else
+    echo "${COMMENT} [WARNING] Colors file not found: $HVE_COLORS_FILE" >> "$TEMP_FILE"
+fi
+# --- IMMORTAL CURVE ---
+{
+    echo "${COMMENT} [SYSTEM: CURVES]"
+    if [ "$HVE_FORMAT" = "lua" ]; then
+        echo "hl.curve(\"linear\", {type = \"bezier\", points = {{0,0},{1,1}}})"
+    else
+        echo "bezier = linear, 0, 0, 1, 1"
+    fi
+    echo "${COMMENT} ----------------------------------------------------"
+    echo ""
+} >> "$TEMP_FILE"
 
-# 2. ORDERED ASSEMBLY (POWER HIERARCHY)
+# --- ORDERED ASSEMBLY (NATIVE FILES) ---
+MODULES=("animation" "border" "shader" "geometry")
 
-# -- A) ANIMATIONS --
-if [ -f "$FRAGMENTS_DIR/animation.conf" ]; then
-    echo "# [MODULE: ANIMATIONS]" >> "$TEMP_FILE"
-    cat "$FRAGMENTS_DIR/animation.conf" >> "$TEMP_FILE"
-    echo "" >> "$TEMP_FILE"
+for MOD in "${MODULES[@]}"; do
+    NATIVE_FRAGMENT="$HVE_FRAGMENTS_DIR/${MOD}.${EXT}"
+
+    if [ -f "$NATIVE_FRAGMENT" ]; then
+        {
+            echo "${COMMENT} [MODULE: ${MOD^^}]"
+            cat "$NATIVE_FRAGMENT"
+            echo ""
+            echo ""
+        } >> "$TEMP_FILE"
+    fi
+done
+
+# ============================================
+# 🔍 SYNTAX RECOGNITION AND VALIDATION (LIVE TEST)
+# ============================================
+VALID=true
+
+if [ "$HVE_FORMAT" = "lua" ]; then
+    if grep -qE '^[[:space:]]*(general|decoration|animations)[[:space:]]*\{' "$TEMP_FILE"; then
+        echo "❌ [HVE ERROR] Validation failed! Expected Lua but detected classic syntax (.conf)."
+        VALID=false
+    fi
+else
+    if grep -qE 'hl\.(config|animation|curve)|require\(' "$TEMP_FILE"; then
+        echo "❌ [HVE ERROR] Validation failed! The builder expects .conf but the file contains Lua code."
+        VALID=false
+    fi
 fi
 
-# -- B) BORDERS (Style and Color) --
-if [ -f "$FRAGMENTS_DIR/border.conf" ]; then
-    echo "# [MODULE: BORDERS]" >> "$TEMP_FILE"
-    cat "$FRAGMENTS_DIR/border.conf" >> "$TEMP_FILE"
-    echo "" >> "$TEMP_FILE"
+# If the test fails, we abort safely
+if [ "$VALID" = false ]; then
+    echo "⚠️ [HVE WARNING] Operation aborted. The active overlay was not modified."
+    rm -f "$TEMP_FILE"
+    exit 1
 fi
 
-# -- C) SHADERS --
-if [ -f "$FRAGMENTS_DIR/shader.conf" ]; then
-    echo "# [MODULE: SHADERS]" >> "$TEMP_FILE"
-    cat "$FRAGMENTS_DIR/shader.conf" >> "$TEMP_FILE"
-    echo "" >> "$TEMP_FILE"
+# --- MASTER MOVE - Atomic Replacement & Cleanup ---
+mv "$TEMP_FILE" "$FINAL_TARGET"
+
+if [ "$HVE_FORMAT" = "lua" ]; then
+    rm -f "$FINAL_FILE_CONF"
+else
+    rm -f "$FINAL_FILE_LUA"
 fi
 
-# -- D) GEOMETRY (The Supreme Boss) --
-# We put this AT THE END so the slider always dictates the size,
-# overriding any errors coming from previous borders.
-if [ -f "$FRAGMENTS_DIR/geometry.conf" ]; then
-    echo "# [MODULE: GEOMETRY]" >> "$TEMP_FILE"
-    cat "$FRAGMENTS_DIR/geometry.conf" >> "$TEMP_FILE"
-    echo "" >> "$TEMP_FILE"
-fi
+# ============================================
+# 🔗 UNIVERSAL SYMLINK FOR NOCTALIA MANIFESTO
+# ============================================
+UNIVERSAL_OVERLAY="$HVE_SAFE_DIR/overlay.current"
 
-# 3. MASTER MOVE
-mv "$TEMP_FILE" "$FINAL_FILE"
+rm -f "$UNIVERSAL_OVERLAY"
+ln -s "$FINAL_TARGET" "$UNIVERSAL_OVERLAY"
 
-# 4. APPLICATION
+# --- APPLICATION ---
 if pgrep -x "Hyprland" > /dev/null; then
-    # Use reload to apply changes without restarting the session
-    hyprctl reload
+    hyprctl reload > /dev/null 2>&1
 fi
+
+echo "✅ [HVE SUCCESS] Overlay verified. Universal 'overlay.current' symlink updated."

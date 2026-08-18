@@ -8,11 +8,11 @@ ColumnLayout {
   id: root
   property var pluginApi: null
 
-  // Settings and default values (Official Noctalia pattern)
+  // Ajustes y valores por defecto (Patrón oficial de Noctalia)
   readonly property var cfg: pluginApi?.pluginSettings || ({})
   readonly property var defaults: pluginApi?.manifest?.metadata?.defaultSettings || ({})
 
-  // 1. Local state ('edit' convention to avoid unnecessary disk writes)
+  // 1. Estado local (Convención 'edit' para evitar escrituras en disco innecesarias)
   property string editOverlayPath: cfg.overlayPath ?? defaults.overlayPath ?? "~/.cache/noctalia/HVE/overlay.conf"
   property bool editAutoApply: cfg.autoApply ?? defaults.autoApply ?? true
   property string editIcon: cfg.icon ?? defaults.icon ?? "adjustments-horizontal"
@@ -20,7 +20,7 @@ ColumnLayout {
 
   spacing: Style.marginM
 
-  // ── Preview ──────────────────────────────────────────────────────────
+  // ── Vista previa ──────────────────────────────────────────────────────────
   RowLayout {
     spacing: Style.marginM
     Layout.alignment: Qt.AlignHCenter
@@ -42,7 +42,7 @@ ColumnLayout {
     }
   }
 
-  // ── Icon Configuration ────────────────────────────────────────────────
+  // ── Configuración de Icono ────────────────────────────────────────────────
   NButton {
     Layout.fillWidth: true
     text: pluginApi?.tr("settings.change_icon_button")
@@ -67,7 +67,7 @@ ColumnLayout {
 
   NDivider { Layout.fillWidth: true }
 
-  // ── Files and Application Configuration ────────────────────────────────
+  // ── Configuración de Archivos y Aplicación ────────────────────────────────
   NTextInput {
     Layout.fillWidth: true
     label: pluginApi?.tr("settings.path_label")
@@ -85,7 +85,7 @@ ColumnLayout {
     onToggled: checked => { root.editAutoApply = checked }
   }
 
-  // ── Save Function (Required by the Shell) ──────────────────────────
+  // ── Función de Guardado (Requerida por la Shell) ──────────────────────────
   function saveSettings() {
     if (!pluginApi) return
     

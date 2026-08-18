@@ -193,6 +193,10 @@
       "13_the_joker": {
         "title": "Le Joker",
         "desc": "Esthétique Joker : vert acide et violet profond avec un éclat électrique."
+      },
+      "14_looper": {
+        "title": "Looper",
+        "desc": "Esthétique Looper : Couleurs du bureau avec effet de boucle."
       }
     }
   },

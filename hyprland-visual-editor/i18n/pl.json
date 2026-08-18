@@ -193,6 +193,10 @@
       "13_the_joker": {
         "title": "Joker",
         "desc": "Estetyka Jokera: Kwaśny zielony i głęboki fiolet z elektrycznym blaskiem."
+      },
+      "14_looper": {
+        "title": "Looper",
+        "desc": "Estetyka Looper: Kolory pulpitu z efektem pętli."
       }
     }
   },

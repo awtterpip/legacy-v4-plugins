@@ -193,6 +193,10 @@
       "13_the_joker": {
         "title": "The Joker",
         "desc": "Estética Joker: Verde ácido e roxo profundo com um brilho elétrico."
+      },
+      "14_looper": {
+        "title": "Looper",
+        "desc": "Estética Looper: Cores do desktop com efeito de loop."
       }
     }
   },

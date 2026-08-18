@@ -1,74 +1,88 @@
 #!/bin/bash
 
 # --- MAIN PATHS ---
-PLUGIN_DIR="$HOME/.config/noctalia/plugins/hyprland-visual-editor"
-FRAGMENTS_DIR="$PLUGIN_DIR/assets/fragments"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "$SCRIPT_DIR/utils.sh"
 
-# 🌟 NEW SAFE PATH (The Refuge) 🌟
-HVE_SAFE_DIR="$HOME/.cache/noctalia/HVE"
-OVERLAY_FILE="$HVE_SAFE_DIR/overlay.conf" # The overlay now lives outside the plugin
+# Detect format
+source "$HVE_SCRIPTS_DIR/detect_format.sh"
+export HVE_FORMAT=$(detect_format 2>/dev/null || echo "conf")
+
+# Safe directory and overlay
 WATCHDOG_FILE="$HVE_SAFE_DIR/hve_watchdog.sh"
 
-# Keep the colors path
-COLORS_FILE="$HOME/.config/hypr/noctalia/noctalia-colors.conf"
-HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
+# Hyprland config files
+HYPR_CONF="$HVE_HYPR_DIR/hyprland.conf"
+HYPR_LUA="$HVE_HYPR_DIR/hyprland.lua"
 
 # Internal assembler path
-ASSEMBLE_SCRIPT="$PLUGIN_DIR/assets/scripts/assemble.sh"
+ASSEMBLE_SCRIPT="$HVE_SCRIPTS_DIR/assemble.sh"
 
-# --- HYPRLAND MARKERS ---
-MARKER_START="# >>> HYPRLAND VISUAL EDITOR START <<<"
-MARKER_END="# >>> HYPRLAND VISUAL EDITOR END <<<"
+# --- RECONSTRUIR VARIABLE DE COLORES PERDIDA ---
+# Usamos HVE_COLORS_BASE que viene del utils.sh y añadimos la extensión correcta
+if [ "$HVE_FORMAT" = "lua" ]; then
+    HVE_COLORS_FILE="${HVE_COLORS_BASE}.lua"
+else
+    HVE_COLORS_FILE="${HVE_COLORS_BASE}.conf"
+fi
 
-# --- CONTENT TO INJECT ---
-LINE_WATCHDOG="exec-once = $WATCHDOG_FILE" # Watchdog injection
-LINE_COLORS="source = $COLORS_FILE"
-LINE_OVERLAY="source = $OVERLAY_FILE"
+# --- MARKERS ---
+# Conf mode uses # comments, Lua mode uses -- comments
+MARKER_START_CONF="# >>> HYPRLAND VISUAL EDITOR START <<<"
+MARKER_END_CONF="# >>> HYPRLAND VISUAL EDITOR END <<<"
+MARKER_START_LUA="-- >>> HYPRLAND VISUAL EDITOR START <<<"
+MARKER_END_LUA="-- >>> HYPRLAND VISUAL EDITOR END <<<"
 
 ACTION=$1
 
-# --- CLEANUP FUNCTION ---
+# --- CLEANUP FUNCTIONS ---
+
 clean_hyprland_conf() {
-    # 1. Delete the entire block between markers
-    sed -i "/$MARKER_START/,/$MARKER_END/d" "$HYPR_CONF"
-
-    # 2. Security cleanup in case old loose lines remained
+    if [ ! -f "$HYPR_CONF" ]; then return; fi
+    sed -i "/$MARKER_START_CONF/,/$MARKER_END_CONF/d" "$HYPR_CONF"
     sed -i "\|source = .*hyprland-visual-editor/overlay.conf|d" "$HYPR_CONF"
-    sed -i "\|$LINE_OVERLAY|d" "$HYPR_CONF"
-    sed -i "\|$LINE_COLORS|d" "$HYPR_CONF"
-
-    # 3. Remove extra empty lines at the end
+    sed -i "\|source = .*HVE/overlay|d" "$HYPR_CONF"
     sed -i '${/^$/d;}' "$HYPR_CONF"
+}
+
+clean_hyprland_lua() {
+    if [ ! -f "$HYPR_LUA" ]; then return; fi
+    sed -i "/$MARKER_START_LUA/,/$MARKER_END_LUA/d" "$HYPR_LUA"
+    sed -i "\|require.*HVE|d" "$HYPR_LUA"
+    sed -i "\|source.*HVE/overlay|d" "$HYPR_LUA"
+    sed -i "\|hl\.exec_cmd.*hve_watchdog|d" "$HYPR_LUA"
+    sed -i '/hl\.on.*hyprland\.start.*function.*HVE/,/end)/d' "$HYPR_LUA"
+    sed -i '${/^$/d;}' "$HYPR_LUA"
 }
 
 # --- SETUP FUNCTION ---
 setup_files() {
     echo "Preparing safe environment and watchdog..."
 
-    # Create fragments folder and the new HVE refuge
-    mkdir -p "$FRAGMENTS_DIR"
+    mkdir -p "$HVE_FRAGMENTS_DIR"
     mkdir -p "$HVE_SAFE_DIR"
 
-    # Grant execution permissions to internal scripts
-    chmod +x "$PLUGIN_DIR/assets/scripts/"*.sh
+    chmod +x "$HVE_SCRIPTS_DIR/"*.sh
 
-    # 🛡️ Deploy the watchdog script
-    cp "$PLUGIN_DIR/assets/scripts/hve_watchdog.sh" "$WATCHDOG_FILE"
+    # Deploy the watchdog script
+    cp "$HVE_SCRIPTS_DIR/hve_watchdog.sh" "$WATCHDOG_FILE"
     chmod +x "$WATCHDOG_FILE"
 
     # Execute the internal assembler
-    # Export the variable so assemble.sh knows where to save the final file
-    export OVERLAY_FILE="$HVE_SAFE_DIR/overlay.conf"
-
     if [ -f "$ASSEMBLE_SCRIPT" ]; then
         bash "$ASSEMBLE_SCRIPT"
 
         # SECURITY PATCH: In case assemble.sh has the old hardcoded path
-        if [ -f "$PLUGIN_DIR/overlay.conf" ]; then
-            mv "$PLUGIN_DIR/overlay.conf" "$HVE_SAFE_DIR/overlay.conf"
+        if [ -f "$HVE_PLUGIN_DIR/overlay.conf" ]; then
+            mv "$HVE_PLUGIN_DIR/overlay.conf" "$HVE_SAFE_DIR/overlay.conf"
         fi
     else
-        echo "# Hyprland Visual Editor Overlay Base" > "$OVERLAY_FILE"
+        if [ "$HVE_FORMAT" = "lua" ]; then
+            echo '#!/usr/bin/env hyprland' > "$HVE_SAFE_DIR/overlay.lua"
+            echo "# Hyprland Visual Editor Overlay Base" >> "$HVE_SAFE_DIR/overlay.lua"
+        else
+            echo "# Hyprland Visual Editor Overlay Base" > "$HVE_SAFE_DIR/overlay.conf"
+        fi
     fi
 }
 
@@ -76,26 +90,49 @@ setup_files() {
 
 if [ "$ACTION" == "enable" ]; then
     setup_files
-    clean_hyprland_conf # Clean duplicates
 
-    # Inject the COMPLETE BLOCK pointing to the safe refuge
-    echo "" >> "$HYPR_CONF"
-    echo "$MARKER_START" >> "$HYPR_CONF"
-    echo "# 1. Active Uninstall Watchdog" >> "$HYPR_CONF"
-    echo "$LINE_WATCHDOG" >> "$HYPR_CONF"
-    echo "# 2. Variable Definition (Color Palette)" >> "$HYPR_CONF"
-    echo "$LINE_COLORS" >> "$HYPR_CONF"
-    echo "# 3. Effects Application (Visual Editor)" >> "$HYPR_CONF"
-    echo "$LINE_OVERLAY" >> "$HYPR_CONF"
-    echo "$MARKER_END" >> "$HYPR_CONF"
+    if [ "$HVE_FORMAT" = "lua" ]; then
+        # === LUA MODE: inject into hyprland.lua ===
+        clean_hyprland_lua
+        clean_hyprland_conf  # Also clean old conf entries if migrating
 
-    # Final reload
+        cat >> "$HYPR_LUA" <<EOF
+
+$MARKER_START_LUA
+-- 1. Active Uninstall Watchdog
+-- 2. Effects Application (Visual Editor)
+--    Colors already loaded via require('configs/noctalia-colors') above
+dofile("$HVE_SAFE_DIR/overlay.lua")
+hl.on("hyprland.start", function()
+    hl.exec_cmd("$WATCHDOG_FILE")
+end)
+$MARKER_END_LUA
+EOF
+
+    else
+        # === CONF MODE: inject into hyprland.conf ===
+        clean_hyprland_conf
+
+        cat >> "$HYPR_CONF" <<EOF
+
+$MARKER_START_CONF
+# 1. Active Uninstall Watchdog
+exec-once = $WATCHDOG_FILE
+# 2. Variable Definition (Color Palette)
+source = $HVE_COLORS_FILE
+# 3. Effects Application (Visual Editor)
+source = $HVE_SAFE_DIR/overlay.conf
+$MARKER_END_CONF
+EOF
+    fi
+
     hyprctl reload
-    
-elif [ "$ACTION" == "disable" ]; then
-    clean_hyprland_conf # Deletes the block from hyprland.conf
 
-    # 🧹 Total cleanup: delete the refuge folder with the overlay and watchdog
+elif [ "$ACTION" == "disable" ]; then
+    clean_hyprland_conf
+    clean_hyprland_lua
+
     rm -rf "$HVE_SAFE_DIR"
 
+    hyprctl reload
 fi
